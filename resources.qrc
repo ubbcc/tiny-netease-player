@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file>download_icon.png</file>
+        <file>favourite_icon.svg</file>
+        <file>star-outline.svg</file>
+        <file>star.svg</file>
+        <file>not_favourite_icon.svg</file>
+        <file>default_cover.jpg</file>
+        <file>comment_icon.svg</file>
+        <file>check.svg</file>
+    </qresource>
+</RCC>
