@@ -375,25 +375,57 @@ void MainWindow::Setup() {
     if (!user.checkLogin(loginRequester)) {
         is_login = true;
         hide();
-        loginWidget = new LoginWidget;
-        loginWidget->setCookieJar(cookieJar);
-        loginWidget->createQR();
-        loginWidget->show();
-        QEventLoop loop;
-        QObject::connect(loginWidget, &LoginWidget::loginSuccessful, &loop, [&](bool is_guest){
-            isGuest = is_guest;
-            loop.quit();
+        // loginWidget = new LoginWidget;
+        // loginWidget->setCookieJar(cookieJar);
+        // loginWidget->createQR();
+        // loginWidget->show();
+        // QEventLoop loop;
+        // QObject::connect(loginWidget, &LoginWidget::loginSuccessful, &loop, [&](bool is_guest){
+        //     isGuest = is_guest;
+        //     loop.quit();
+        // });
+        // QObject::connect(loginWidget, &LoginWidget::quitApp, this, [&]() {
+        //     is_ending = true;
+        //     loop.quit();
+        // });
+        // loop.exec();
+        // if (is_ending) {
+        //     return;
+        // }
+        QDialog cookieDialog(this);
+        cookieDialog.setModal(true);
+        QTextEdit cookieEdit(&cookieDialog);
+        cookieEdit.setPlaceholderText("Paste your cookies here...");
+        cookieEdit.setAcceptRichText(false);
+        QPushButton cookieBtn(&cookieDialog);
+        cookieBtn.setText("Confirm");
+        QVBoxLayout layout;
+        layout.addWidget(&cookieEdit, 5);
+        layout.addWidget(&cookieBtn, 1);
+        cookieDialog.setLayout(&layout);
+        QObject::connect(&cookieBtn, &QPushButton::clicked, this, [&]() {
+            QString cookieStr = cookieEdit.toPlainText();
+            QByteArray cookieArr = cookieStr.toUtf8();
+            qDebug() << cookieArr;
+
+            QList<QNetworkCookie> cookies;
+            QList<QNetworkCookie> parsed = QNetworkCookie::parseCookies(cookieArr);
+            for (const QNetworkCookie &cookie : parsed) {
+                cookies.append(cookie);
+            }
+            qDebug() << cookies;
+
+            cookieJar->setAllCookiesPublic(cookies);
+            if (user.checkLogin(loginRequester)) {
+                cookieDialog.accept();
+            } else {
+                QMessageBox::warning(&cookieDialog, "Warning", "Cookies invalid!");
+            }
         });
-        QObject::connect(loginWidget, &LoginWidget::quitApp, this, [&]() {
-            is_ending = true;
-            loop.quit();
-        });
-        loop.exec();
-        if (is_ending) {
-            return;
-        }
+
+        cookieDialog.exec();
         cookieJar->saveCookiesToFile("music_a.txt");
-        loginWidget->stopCheckQR();
+        // loginWidget->stopCheckQR();
         user.GetUserInfo(requester);
     } else {
         if (user_nick_name == "Guest") {
