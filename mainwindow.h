@@ -34,6 +34,7 @@
 #include <QStyledItemDelegate>
 #include <QCompleter>
 #include <QGroupBox>
+#include <QTextEdit>
 #include <QGridLayout>
 #include <QScrollArea>
 #include <QVBoxLayout>
