@@ -2,11 +2,10 @@
 
 User::User(QObject *parent) : QObject(parent) {
     requester = nullptr;
-
-
 }
 
 bool User::checkLogin(ApiRequester *requester) {
+    this->requester = requester;
     QJsonDocument json = requester->ApiRequest("", "https://music.163.com/eapi/v1/user/info", "/api/v1/user/info");
     if (json["code"] == 404) {
         return false;
@@ -16,7 +15,6 @@ bool User::checkLogin(ApiRequester *requester) {
 }
 
 void User::GetUserInfo(ApiRequester *requester) {
-    this->requester = requester;
     QJsonDocument json = requester->ApiRequest("", "https://music.163.com/eapi/v1/user/info", "/api/v1/user/info");
     user_id = json["userPoint"].toObject()["userId"].toInteger();
 
@@ -103,6 +101,7 @@ QList<qint64> User::GetFavouriteIds(ApiRequester *requester, qint64 fav_id) {
     QJsonDocument json(root);
     QString json_text = json.toJson(QJsonDocument::Compact);
     json = requester->ApiRequest(json_text, "http://interface3.music.163.com/eapi/song/like/get", "/api/song/like/get");
+    qDebug() << json["code"].toInt();
     if (json["code"].toInt() / 100 == 3) {
         // qDebug() << "usic.163.com/eapi/song/like/get FAIL";
         QJsonObject root2;
@@ -321,7 +320,7 @@ bool User::CheckVIPSt(ApiRequester *requester) {
     root["e_r"] = true;
     root["os"] = "iOS";
     json.setObject(root);
-    json = requester->ApiRequest(json.toJson(QJsonDocument::Compact), "https://interface3.music.163.com/eapi/music-vip-membership/client/vip/info", "/api/music-vip-membership/client/vip/info");
+    json = requester->ApiRequest(json.toJson(QJsonDocument::Compact), "https://interface3.music.163.com/eapi/music-vip-membership/client/vip/info", "/api/music-vip-membership/client/vip/info", true);
 
     if (json["code"] != 200) {
         return false;

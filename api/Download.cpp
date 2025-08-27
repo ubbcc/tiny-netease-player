@@ -33,46 +33,7 @@ Downloader::Downloader(QObject *parent)
 
     headers.append("User-Agent", ChooseUserAgent());
     headers.append("Content-Type", "application/x-www-form-urlencoded");
-
-    QString cookies_str;
-    QVector<QPair<QString, QString>> cookies_ = {
-                                                {"appver", "8.9.70"},
-                                                {"buildver", GetTime10Digits()},
-                                                {"resulution", "1920x1080"},
-                                                {"os", "Android"},
-                                                {"NMTID", "00Olq-ZjX3Zh6UjokPQs695eltgPzwAAAGWXOtzdw"},
-                                                {"MUSIC_U", MUSIC_U},
-                                                };
-    bool first = true;
-    for (auto& [name, value] : cookies_) {
-        if (first) {
-            cookies_str.append(QString("%1=%2").arg(name, value));
-            first = false;
-        } else {
-            cookies_str.append(QString("; %1=%2").arg(name, value));
-        }
-    }
-    headers.append("Cookie", cookies_str);
-
-    QNetworkCookieJar *cookieJar = new QNetworkCookieJar();
-
-    // 创建 Cookie 并设置属性
-    QList<QNetworkCookie> cookies;
-    cookies.append(QNetworkCookie("appver", "8.9.70"));
-    cookies.append(QNetworkCookie("buildver", GetTime10Digits().toUtf8()));
-    cookies.append(QNetworkCookie("resulution", "1920x1080"));
-    cookies.append(QNetworkCookie("os", "Android"));
-    cookies.append(QNetworkCookie("NMTID", "00Olq-ZjX3Zh6UjokPQs695eltgPzwAAAGWXOtzdw"));
-    cookies.append(QNetworkCookie("MUSIC_U", MUSIC_U.toUtf8()));
-    QStringList urls = {
-        "https://music.163.com/eapi/v3/song/detail",
-        "https://music.163.com/eapi/song/enhance/player/url/v1",
-    };
-    for (const QString &url : urls) {
-        cookieJar->setCookiesFromUrl(cookies, QUrl(url));
-    }
-
-    requester->setCookieJar(cookieJar);
+    headers.append("Cookie", QString("appver=8.9.70; buildver=%1; resulution=1920x1080; os=Android; NMTID=00Olq-ZjX3Zh6UjokPQs695eltgPzwAAAGWXOtzdw; MUSIC_U=%2; deviceId=9CC2C781CEEC4408333573ACF975B764BB3D6492A63544CD059A; channel=distribution").arg(GetTime10Digits()).arg(MUSIC_U).toUtf8());
 
     QObject::connect(this, &Downloader::DownloadFinished, this, [&](QString) {
         if (property("songModelRowNum") != QVariant() and property("songId") != QVariant() and property("type") != QVariant()) {

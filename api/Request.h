@@ -21,10 +21,8 @@
 #include <QtNetwork/QHttpHeaders>
 #include <QCryptographicHash>
 
-#include <QNetworkCookie>
-#include <QNetworkCookieJar>
-
 #include <QEventLoop>
+#include <QString>
 
 // using RequestCallback = void(*)(QNetworkReply *);
 

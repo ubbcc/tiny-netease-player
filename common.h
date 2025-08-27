@@ -39,5 +39,6 @@ inline EncodeType encodeType{kMp3};
 inline QRegularExpression sanitizeFileNameregex(R"([\\/:*?"<>|])");
 const QString cookiesKey{"L2g&9@rZ!mb7X#Hp"};
 inline bool isGuest = true;
+inline QString loginCookieStr = "";
 
 #endif // COMMON_H

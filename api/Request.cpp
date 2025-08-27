@@ -1,6 +1,5 @@
 #include "Request.h"
 #include <QMessageBox>
-#include <QString>
 
 ApiRequester::ApiRequester(QObject* parent) : QObject(parent) {
     manager = new QNetworkAccessManager;
@@ -11,14 +10,6 @@ ApiRequester::ApiRequester(QObject* parent) : QObject(parent) {
             QObject::connect(this, SIGNAL("didntLogin"), parent, SLOT("Relogin"));
         }
     }
-}
-
-void ApiRequester::setCookieJar(QNetworkCookieJar *cookieJar) {
-    manager->setCookieJar(cookieJar);
-}
-
-QNetworkCookieJar *ApiRequester::cookieJar() {
-    return manager->cookieJar();
 }
 
 QString ApiRequester::generateRequestId() {
@@ -73,7 +64,7 @@ QJsonDocument ApiRequester::ApiRequest(const QString &json_text, const QString &
 //  }
 
 
-QByteArray ApiRequester::SendRequest(QByteArray data, QString url, QString path, bool log) {
+QByteArray ApiRequester::SendRequest(QByteArray data, QString url, QString path, bool vip) {
     // QObject::connect(manager, &QNetworkAccessManager::finished, this, callback);
 
     QUrl url_(url);
@@ -87,11 +78,10 @@ QByteArray ApiRequester::SendRequest(QByteArray data, QString url, QString path,
     request->setRawHeader("Accept-Language", "zh-CN,zh;q=0.9");
 
     // 设置请求头
-    if (log) {
-        // request->setRawHeader("Accept-Encoding", "gzip, deflate, br");
-        request->setRawHeader("Cookie", QString("osver=16.2; deviceId=9CC2C781CEEC4408333573ACF975B764BB3D6492A63544CD059A; os=iPhone OS; appver=9.0.90; versioncode=140; mobilename=; buildver=%1; resolution=1920x1080; __csrf=; channel=distribution; requestId=%2").arg(GetTime10Digits()).arg(generateRequestId()).toUtf8());
+    if (vip) {
+        request->setRawHeader("Cookie", QString("appver=8.9.70; buildver=%1; resulution=1920x1080; os=Android; NMTID=00Olq-ZjX3Zh6UjokPQs695eltgPzwAAAGWXOtzdw; MUSIC_U=%2; deviceId=9CC2C781CEEC4408333573ACF975B764BB3D6492A63544CD059A; channel=distribution; requestId=%3").arg(GetTime10Digits()).arg(MUSIC_U).arg(generateRequestId()).toUtf8());
     } else {
-        // request->setRawHeader("Cookie", "MUSIC_U=00E9008B6285D3E6B6844276C4F70C90D53C905FD9BF3B416454155FAECC7223C1AC5DDDD99DF428D47EE3F78E068978856C651B6ED5AE28CF5674D21B522057D86B2CB1DCDB742FA003690588D31EC10FF24CB90D39CF32B95E8D21227142271A30A010985BDE4DBDE95E6BF19C8B6CF4261FFBEF057377764BEB029C955102818DEA5B40B525331703FBFB907D2E1488BFD892112C4BFE07438C1C22901F024E591C51F251C855091430B0F3780DA8B28DBAB049A1B9A3720C00F4D063C987F310E7075F64E5C8385AF85D5885FD23F526FE623B7003384C69B70F489C1981DF7ADC6E32D968304C46239E7A687519B2717B3D1DEDAD9B17727E41FD219CC7209999D4E8EEE84743F13082F5C1A755A3A38D807E86C9E58CE7BC11F18835E224838C213E2F25996D4E4D4A35CB7DA0AE");
+        request->setRawHeader("Cookie", QString("%1; osver=16.2; deviceId=9CC2C781CEEC4408333573ACF975B764BB3D6492A63544CD059A; os=iPhone OS; appver=9.0.90; versioncode=140; mobilename=; buildver=%2; resolution=1920x1080; channel=distribution; requestId=%3").arg(loginCookieStr).arg(GetTime10Digits()).arg(generateRequestId()).toUtf8());
     }
 
     // QString cookies_str;

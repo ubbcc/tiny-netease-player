@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "common.h"
 #include "ui_mainwindow.h"
+#include <qpainter.h>
 
 SongItemDelegate::SongItemDelegate(QObject *parent) : QStyledItemDelegate(parent) {
     favourite_icon = new QIcon(":/favourite_icon.svg");
@@ -277,9 +278,7 @@ QString MainWindow::ReadMusicU(const QString &file_name) {
     }
 
     QByteArray content = file.readAll();
-    // qDebug() << "content" << content;
-    content = MyDec(content, cookiesKey);
-    // qDebug() << "content" << content;
+    // content = MyDec(content, cookiesKey);
 
     file.close();
 
@@ -326,6 +325,94 @@ QString MainWindow::GetTime10Digits() { // 获取当前时间的 Unix 时间戳�
     return truncatedTimestamp;
 }
 
+// QList<QNetworkCookie> MainWindow::myParseCookies(const QString &cookieStr) {
+//     QList<QNetworkCookie> cookiesList;
+//     QString cleanStr = cookieStr.trimmed();
+//     cleanStr.replace('\n', ';');
+//     cleanStr.replace('\r', ';');
+//     QStringList cookieParts = cleanStr.split(';', Qt::SkipEmptyParts);
+//     for (const QString &part : cookieParts) {
+//         QString trimmedPart = part.trimmed();
+//         if (trimmedPart.isEmpty() || !trimmedPart.contains('=')) {
+//             continue;
+//         }
+
+//         // 5. 使用 .section() 进行分割，这是最推荐的方式
+//         QByteArray name = trimmedPart.section('=', 0, 0).toUtf8().trimmed();
+//         QByteArray value = trimmedPart.section('=', 1).toUtf8().trimmed();
+
+//         if (name.isEmpty()) {
+//             continue;
+//         }
+
+//         // 6. 创建一个 QNetworkCookie 对象并添加到列表中
+//         QNetworkCookie newCookie(name, value);
+//         cookiesList.append(newCookie);
+//     }
+
+//     return cookiesList;
+// }
+
+void MainWindow::SaveMusicAtoFile(QString fileName) {
+    QString filePath = cwd.absoluteFilePath(fileName);
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        qWarning() << "无法打开文件保存 cookies:" << file.errorString();
+        return;
+    }
+
+    file.write(loginCookieStr.toUtf8());
+    file.close();
+}
+
+CookieInputDialog::CookieInputDialog(QWidget *parent)
+    : QDialog(parent)
+{
+    setWindowTitle("请粘贴您的Cookies");
+    // setFixedSize(500, 800);
+
+    this->setModal(true);
+    m_cookieEdit = new QTextEdit(this);
+    m_cookieEdit->setPlaceholderText("Paste your cookies here...");
+    m_cookieEdit->setAcceptRichText(false);
+    m_cookieBtn = new QPushButton(this);
+    m_cookieBtn->setText("Confirm");
+    m_layout = new QVBoxLayout(this);
+    m_layout->addWidget(m_cookieEdit, 5);
+    m_layout->addWidget(m_cookieBtn, 1);
+    this->setLayout(m_layout);
+
+    QObject::connect(m_cookieBtn, &QPushButton::clicked, this, [=, this](){
+        emit checkCookie(m_cookieEdit->toPlainText().trimmed());
+    });
+}
+
+CookieInputDialog::~CookieInputDialog()
+{
+}
+
+// 这是实现拦截操作的核心代码
+void CookieInputDialog::closeEvent(QCloseEvent *event)
+{
+    // 创建一个消息框
+    QMessageBox::StandardButton result = QMessageBox::question(
+        this,
+        "确认关闭",                // 标题
+        "关闭此窗口将使用游客登录",    // 提示文本
+        QMessageBox::Yes | QMessageBox::No, // 按钮组合
+        QMessageBox::No                     // 默认按钮
+    );
+
+    // 根据用户的选择决定如何处理关闭事件
+    if (result == QMessageBox::Yes) {
+        // 用户选择“是”，接受关闭事件，窗口将关闭
+        event->accept();
+    } else {
+        // 用户选择“否”，忽略该事件，窗口将不会关闭
+        event->ignore();
+    }
+}
+
 void MainWindow::Setup() {
     QString appDir = QCoreApplication::applicationDirPath();
     QDir dir(appDir);
@@ -336,96 +423,30 @@ void MainWindow::Setup() {
 
     LoadSettings();
 
-    cookieJar = new PersistentCookieJar;
-    cookieJar->loadCookiesFromFile("music_a.txt");
-    // qDebug() << cookieJar->cookiesForUrl(QUrl("https://music.163.com/eapi/v1/user/info"));
-    requester->setCookieJar(cookieJar);
-    user_requester->setCookieJar(cookieJar);
-    suggestion_requester->setCookieJar(cookieJar);
-    cookieJar->setParent(requester); // 避免内存泄漏
-
     MUSIC_U = ReadMusicU("music_u_.txt");
     ApiRequester *VIPRequester = new ApiRequester(this);
-    QNetworkCookieJar *VIPcookieJar = new QNetworkCookieJar(VIPRequester);
-    // 创建 Cookie 并设置属性
-    QList<QNetworkCookie> VIPcookies;
-    VIPcookies.append(QNetworkCookie("appver", "8.9.70"));
-    VIPcookies.append(QNetworkCookie("buildver", GetTime10Digits().toUtf8()));
-    VIPcookies.append(QNetworkCookie("resulution", "1920x1080"));
-    VIPcookies.append(QNetworkCookie("os", "Android"));
-    VIPcookies.append(QNetworkCookie("NMTID", "00Olq-ZjX3Zh6UjokPQs695eltgPzwAAAGWXOtzdw"));
-    VIPcookies.append(QNetworkCookie("MUSIC_U", MUSIC_U.toUtf8()));
-    QStringList VIPurls = {
-        "https://interface3.music.163.com/eapi/music-vip-membership/client/vip/info",
-    };
-    for (const QString &VIPurl : VIPurls) {
-        VIPcookieJar->setCookiesFromUrl(VIPcookies, QUrl(VIPurl));
-    }
-    VIPRequester->setCookieJar(VIPcookieJar);
     if (!user.CheckVIPSt(VIPRequester)) {
         is_ending = true;
         QMessageBox::warning(this, "", "服务器已更新，破解失败！请联系开发者获取更新版本！");
         return;
     }
 
-    ApiRequester *loginRequester = new ApiRequester(this);
-    loginRequester->setCookieJar(cookieJar);
-
-    is_login = false;
-    if (!user.checkLogin(loginRequester)) {
-        is_login = true;
+    loginCookieStr = ReadMusicU("music_a.txt");
+    isGuest = true;
+    if (loginCookieStr.isEmpty() or !user.checkLogin(requester)) {
         hide();
-        // loginWidget = new LoginWidget;
-        // loginWidget->setCookieJar(cookieJar);
-        // loginWidget->createQR();
-        // loginWidget->show();
-        // QEventLoop loop;
-        // QObject::connect(loginWidget, &LoginWidget::loginSuccessful, &loop, [&](bool is_guest){
-        //     isGuest = is_guest;
-        //     loop.quit();
-        // });
-        // QObject::connect(loginWidget, &LoginWidget::quitApp, this, [&]() {
-        //     is_ending = true;
-        //     loop.quit();
-        // });
-        // loop.exec();
-        // if (is_ending) {
-        //     return;
-        // }
-        QDialog cookieDialog(this);
-        cookieDialog.setModal(true);
-        QTextEdit cookieEdit(&cookieDialog);
-        cookieEdit.setPlaceholderText("Paste your cookies here...");
-        cookieEdit.setAcceptRichText(false);
-        QPushButton cookieBtn(&cookieDialog);
-        cookieBtn.setText("Confirm");
-        QVBoxLayout layout;
-        layout.addWidget(&cookieEdit, 5);
-        layout.addWidget(&cookieBtn, 1);
-        cookieDialog.setLayout(&layout);
-        QObject::connect(&cookieBtn, &QPushButton::clicked, this, [&]() {
-            QString cookieStr = cookieEdit.toPlainText();
-            QByteArray cookieArr = cookieStr.toUtf8();
-            qDebug() << cookieArr;
 
-            QList<QNetworkCookie> cookies;
-            QList<QNetworkCookie> parsed = QNetworkCookie::parseCookies(cookieArr);
-            for (const QNetworkCookie &cookie : parsed) {
-                cookies.append(cookie);
-            }
-            qDebug() << cookies;
-
-            cookieJar->setAllCookiesPublic(cookies);
-            if (user.checkLogin(loginRequester)) {
-                cookieDialog.accept();
-            } else {
+        CookieInputDialog cookieDialog(this);
+        QObject::connect(&cookieDialog, &CookieInputDialog::checkCookie, this, [&](QString cookieStr){
+            loginCookieStr = cookieStr;
+            if(cookieStr.isEmpty() or !user.checkLogin(requester)) {
                 QMessageBox::warning(&cookieDialog, "Warning", "Cookies invalid!");
+            } else {
+                cookieDialog.accept();
             }
         });
-
         cookieDialog.exec();
-        cookieJar->saveCookiesToFile("music_a.txt");
-        // loginWidget->stopCheckQR();
+        SaveMusicAtoFile();
         user.GetUserInfo(requester);
     } else {
         if (user_nick_name == "Guest") {
@@ -514,7 +535,6 @@ void MainWindow::Setup() {
     descriptionScrollAreaWidgetContentsLayout->addWidget(ui->descriptionLabel);
     ui->descriptionScrollAreaWidgetContents->setLayout(descriptionScrollAreaWidgetContentsLayout);
     QObject::connect(requester, &ApiRequester::didntLogin, this, &MainWindow::Relogin);
-    QObject::connect(cookieJar, &PersistentCookieJar::didntLogin, this, &MainWindow::Relogin);
 }
 
 void MainWindow::SetupMenu() {
@@ -779,23 +799,30 @@ void MainWindow::SetupDetailWidget() {
 void MainWindow::Relogin() {
     hide();
     QMessageBox::warning(this, "", "检测到登录信息已过期，请重新登录！");
-    is_login = true;
 
-    QString musicaPath = cwd.absoluteFilePath("music_a.txt");
-    QFile::remove(musicaPath);
-
-    LoginWidget *newLoginWidget = new LoginWidget;
-    newLoginWidget->setCookieJar(cookieJar);
-    newLoginWidget->createQR();
-    newLoginWidget->show();
-    QEventLoop loop;
-    QObject::connect(newLoginWidget, &LoginWidget::loginSuccessful, &loop, [&](bool is_guest){
-            isGuest = is_guest;
-            loop.quit();
-        });
-    loop.exec();
-    cookieJar->saveCookiesToFile("music_a.txt");
-    newLoginWidget->stopCheckQR();
+    hide();
+    QDialog cookieDialog(this);
+    cookieDialog.setModal(true);
+    QTextEdit cookieEdit(&cookieDialog);
+    cookieEdit.setPlaceholderText("Paste your cookies here...");
+    cookieEdit.setAcceptRichText(false);
+    QPushButton cookieBtn(&cookieDialog);
+    cookieBtn.setText("Confirm");
+    QVBoxLayout layout;
+    layout.addWidget(&cookieEdit, 5);
+    layout.addWidget(&cookieBtn, 1);
+    cookieDialog.setLayout(&layout);
+    QObject::connect(&cookieBtn, &QPushButton::clicked, this, [&]() {
+        loginCookieStr = cookieEdit.toPlainText().trimmed();
+        if (user.checkLogin(requester)) {
+            isGuest = false;
+            cookieDialog.accept();
+        } else {
+            QMessageBox::warning(&cookieDialog, "Warning", "Cookies invalid!");
+        }
+    });
+    cookieDialog.exec();
+    SaveMusicAtoFile();
     user.GetUserInfo(requester);
     show();
 }
@@ -1903,8 +1930,12 @@ void MainWindow::SetUserInfo(qint64 user_id, QString user_nick_name) {
     this->user_id = user_id;
     this->user_nick_name = user_nick_name;
     this->favourite_id = user.GetFavouriteId(requester, user_id);
-
-    if (is_login and isGuest) {
+    if (user_nick_name.isEmpty()) {
+        isGuest = true;
+    } else {
+        isGuest = false;
+    }
+    if (isGuest) {
         this->user_nick_name = user_nick_name = "Guest";
     }
     setWindowTitle(QString("Tiny Netease Music(已登录: %1)").arg(user_nick_name));
@@ -2171,6 +2202,7 @@ void MainWindow::OnCellDoubleClicked(const QModelIndex &index) {
         if (index.column() == 1) {
             QModelIndex idx = model->index(index.row(), 1);
             QString name = model->data(idx).toString();
+
             idx = model->index(index.row(), 0);
             qint64 id = model->data(idx).toLongLong();
 
@@ -2199,7 +2231,7 @@ void MainWindow::OnCellDoubleClicked(const QModelIndex &index) {
         } else if (index.column() == 2) {
             QModelIndex idx = model->index(index.row(), 3);
             qint64 creatorId = model->data(idx).toLongLong();
-            qint64 prevCreatorId = undoStack.top().args[0].toLongLong();
+            qint64 prevCreatorId = undoStack.top().args.isEmpty() ? 0 : undoStack.top().args[0].toLongLong();
 
             if (creatorId == 0 or creatorId == prevCreatorId) {
                 return;
@@ -3107,8 +3139,9 @@ void MainWindow::RefreshArtistDetail(qint64 artist_id) {
     artist_pic_url = artist_homepage["cover"].toString();
     artist_description = artist_homepage["briefDesc"].toString();
     ui->descriptionLabel->setText(name + "\n" + artist_description);
-    QObject::connect(downloader, &Downloader::DownloadFinished, this, [artist_pic_url, this]() { DisplayAlbumPicture(artist_pic_url); }, Qt::SingleShotConnection);
-    downloader->PictureDownload(artist_pic_url);
+    Downloader *artist_profile_img_downloader = new Downloader();
+    QObject::connect(artist_profile_img_downloader, &Downloader::DownloadFinished, this, [=, this]() { DisplayAlbumPicture(artist_pic_url); artist_profile_img_downloader->deleteLater(); }, Qt::SingleShotConnection);
+    artist_profile_img_downloader->PictureDownload(artist_pic_url);
 
     QJsonValue follow = user.GetArtistFollowerCount(requester, artist_id)["data"];
     qint64 subscribedCount = follow["fansCnt"].toInteger();
@@ -3325,8 +3358,9 @@ void MainWindow::RefreshUserDetail(qint64 user_id) {
     RefreshUserPlaylists(playlistsJson);
 
     QString avatarPicUrl = json["profile"]["avatarUrl"].toString();
-    QObject::connect(downloader, &Downloader::DownloadFinished, this, [avatarPicUrl, this]() { DisplayAlbumPicture(avatarPicUrl); }, Qt::SingleShotConnection);
-    downloader->PictureDownload(avatarPicUrl);
+    Downloader *user_profile_img_downloader = new Downloader();
+    QObject::connect(user_profile_img_downloader, &Downloader::DownloadFinished, this, [=, this]() { DisplayAlbumPicture(avatarPicUrl); user_profile_img_downloader->deleteLater(); }, Qt::SingleShotConnection);
+    user_profile_img_downloader->PictureDownload(avatarPicUrl);
 
     // static QMetaObject::Connection prevSubBtnConn;
     Refreshed();
@@ -3383,8 +3417,9 @@ void MainWindow::RefreshAlbumDetail(qint64 album_id) {
     RefreshPlaylist(json["songs"].toArray());
 
     QString album_pic_url = json["album"].toObject()["picUrl"].toString();
-    QObject::connect(downloader, &Downloader::DownloadFinished, this, [album_pic_url, this]() { DisplayAlbumPicture(album_pic_url); }, Qt::SingleShotConnection);
-    downloader->PictureDownload(album_pic_url);
+    Downloader *album_img_downloader = new Downloader();
+    QObject::connect(album_img_downloader, &Downloader::DownloadFinished, this, [=, this]() { DisplayAlbumPicture(album_pic_url); album_img_downloader->deleteLater(); }, Qt::SingleShotConnection);
+    album_img_downloader->PictureDownload(album_pic_url);
 
     json = playlist.GetAlbumSub(requester, album_id);
     bool sub = json["isSub"].toBool();
@@ -3459,6 +3494,7 @@ void MainWindow::RefreshMyRcmdUser() {
     for (QJsonValueRef user : users) {
         UserInfo userInfo;
         QJsonValue userObj = user;
+        // qDebug() << userObj;
         userInfo.id = userObj["userId"].toInteger();
         userInfo.name = userObj["nickname"].toString();
         userInfo.signature = userObj["signature"].toString();
@@ -3477,7 +3513,6 @@ void MainWindow::RefreshPlaylistDetail(qint64 playlist_id) {
     Refreshing();
 
     QJsonValue json = playlist.GetPlaylistDetail(requester, playlist_id)["playlist"];
-
     QString playlist_name = json["name"].toString();
     cover_title = playlist_name;
     QJsonValue playlist_description = json["description"];
@@ -3486,8 +3521,32 @@ void MainWindow::RefreshPlaylistDetail(qint64 playlist_id) {
     for (auto t : json["tags"].toArray()) {
         tagsList.append(t.toString());
     }
-    QString tags = tagsList.join(",");
-    ui->descriptionLabel->setText(playlist_name + (tags == "" ? "" : "\n标签" + tags) + (playlist_description == QJsonValue::Null ? "" : "\n" + playlist_description.toString()) + QString("\n%1首歌").arg(trackCount));
+    QString tags = tagsList.join("/");
+    QString playlist_comp_desc = playlist_name
+            + QString("\n共%1首歌").arg(trackCount)
+            + (tags == "" ? "" : "·" + tags)
+            + (playlist_description == QJsonValue::Null ? "" : "\n" + playlist_description.toString());
+    ui->descriptionLabel->setText(playlist_comp_desc);
+
+    bool sub = json["subscribed"].toBool();
+    qint64 subscribedCount = json["subscribedCount"].toInteger();
+    QString creator = json["creator"]["nickname"].toString();
+    qint64 userId = json["creator"]["userId"].toInteger();
+    qint64 id = json["id"].toInteger();
+
+    QString playlist_pic_url = json.toObject()["coverImgUrl"].toString();
+
+    Downloader *album_img_downloader = new Downloader();
+    QObject::connect(album_img_downloader, &Downloader::DownloadFinished, this, [=, this]() { DisplayAlbumPicture(playlist_pic_url); album_img_downloader->deleteLater(); }, Qt::SingleShotConnection);
+    album_img_downloader->PictureDownload(playlist_pic_url);
+    // static QMetaObject::Connection prevSubBtnConn, prevRcmdBtnConn, prevCrBtnConn;
+    if (prevRcmdBtnConn != QMetaObject::Connection()) {
+        QObject::disconnect(prevRcmdBtnConn);
+    }
+    prevRcmdBtnConn = QObject::connect(ui->rcmd_button, &QPushButton::clicked, this, [=, this]() {
+        undoStack.push(Command{"Refresh", "RecommendPlaylist", {id}});
+        RefreshRcmdPlaylist(id);
+    });
 
     int cursor = 0;
     QJsonArray trackIds = json["trackIds"].toArray();
@@ -3526,26 +3585,20 @@ void MainWindow::RefreshPlaylistDetail(qint64 playlist_id) {
             Refreshed();
             ui->pageDownButton->setEnabled(false);
             ui->pageUpButton->setEnabled(false);
+
+            if (userId == user_id) {
+                ui->sub_button->hide();
+                ui->creator_button->hide();
+                ui->rcmd_button->hide();
+            } else {
+                ui->sub_button->show();
+                ui->creator_button->show();
+                ui->rcmd_button->show();
+                ui->downloadCoverPicButton->show();
+            }
         });
     }
 
-    bool sub = json["subscribed"].toBool();
-    qint64 subscribedCount = json["subscribedCount"].toInteger();
-    QString creator = json["creator"]["nickname"].toString();
-    qint64 userId = json["creator"]["userId"].toInteger();
-    qint64 id = json["id"].toInteger();
-
-    QString playlist_pic_url = json.toObject()["coverImgUrl"].toString();
-    QObject::connect(downloader, &Downloader::DownloadFinished, this, [playlist_pic_url, this]() { DisplayAlbumPicture(playlist_pic_url); }, Qt::SingleShotConnection);
-    downloader->PictureDownload(playlist_pic_url);
-    // static QMetaObject::Connection prevSubBtnConn, prevRcmdBtnConn, prevCrBtnConn;
-    if (prevRcmdBtnConn != QMetaObject::Connection()) {
-        QObject::disconnect(prevRcmdBtnConn);
-    }
-    prevRcmdBtnConn = QObject::connect(ui->rcmd_button, &QPushButton::clicked, this, [=, this]() {
-        undoStack.push(Command{"Refresh", "RecommendPlaylist", {id}});
-        RefreshRcmdPlaylist(id);
-    });
     Refreshed();
     UpdateInfoVisibility(true);
     ui->pageUpButton->setEnabled(false);
@@ -4137,7 +4190,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     layout->addWidget(homePageblocksOrderLabel, 2, 0);
 
     checkBoxLabelsAndJsonValue = {{"我的歌单", "PAGE_RECOMMEND_MY_SHEET"},
-                                  {"专属推荐", "PAGE_RECOMMEND_COMBINATION"},
+                                  // {"专属推荐", "PAGE_RECOMMEND_COMBINATION"},
                                   {"私人推荐", "PAGE_RECOMMEND_PRIVATE_RCMD_SONG"},
                                   {"雷达歌单", "PAGE_RECOMMEND_RADAR"},
                                   {"氛围歌单", "PAGE_RECOMMEND_FEELING_PLAYLIST_LOCATION"},
@@ -4149,12 +4202,12 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
                                   {"影视原声音乐", "PAGE_RECOMMEND_FIRM_PLAYLIST"},
                                   {"每周新热趋势", "PAGE_RECOMMEND_NEW_SONG_AND_ALBUM"},
                                   {"原创歌曲", "PAGE_RECOMMEND_SPECIAL_ORIGIN_SONG_LOCATION"},
-                                  {"回忆歌单", "PAGE_RECOMMEND_MONTH_YEAR_PLAYLIST"},
+                                  // {"回忆歌单", "PAGE_RECOMMEND_MONTH_YEAR_PLAYLIST"},
                                   {"地方特色", "PAGE_RECOMMEND_LBS"},
                                   {"根据你喜爱的歌曲推荐", "PAGE_RECOMMEND_RED_SIMILAR_SONG"},
                                   };
     checkBoxLayout = new QGridLayout;
-    static const int ROWSIZE = 8;
+    static const int ROWSIZE = 7;
     int cnt = 0;
     for (auto [label, jsonValue] : checkBoxLabelsAndJsonValue) {
         auto *checkBox = new QCheckBox(label, this);
@@ -4302,8 +4355,6 @@ CommentsDialog::CommentsDialog(QWidget *parent) : QDialog(parent) {
         qint64 userId = commentsModel->data(idx, Qt::EditRole).toLongLong();
         idx = commentsModel->index(row, 3);
         qint64 songId = commentsModel->data(idx, Qt::EditRole).toLongLong();
-
-        qDebug() << "commentView double clicked " << index;
 
         if (index.column() == 2) {
             mainWindow->undoStack.push(Command{"Refresh", "UserDetail", {userId}});
@@ -4485,7 +4536,6 @@ CommentFloorDialog::CommentFloorDialog(QWidget *parent) : QDialog(parent) {
 
 
     mainWindow = static_cast<CommentsDialog*>(parent)->mainWindow;
-    qDebug() << mainWindow;
 
     QObject::connect(quitButton, &QPushButton::clicked, this, &QDialog::accept);
     QObject::connect(pageDownButton, &QPushButton::clicked, this, [&]() {
@@ -4494,7 +4544,6 @@ CommentFloorDialog::CommentFloorDialog(QWidget *parent) : QDialog(parent) {
     });
     QObject::connect(commentFloorView, &QTableView::doubleClicked, this, [&](const QModelIndex &index) {
         int row = index.row();
-        qDebug() << "commentFloorView double clicked" <<  mainWindow << index << row;
         if (index.column() == 2) {
             QModelIndex idx = commentFloorModel->index(row, 1);
             qint64 userId = commentFloorModel->data(idx, Qt::EditRole).toLongLong();
@@ -4692,6 +4741,8 @@ qint64 AddToPlaylistDialog::getTargetPlaylistId() {
 bool AddToPlaylistDialog::isPrivatePlaylist() {
     return isPrivatePlaylistCheck->isChecked();
 }
+
+
 
 UndoStack::UndoStack(MainWindow *parent, int limit) : limit(limit + 1), parent(parent), QObject((QObject*)parent) {
     push(Command{"RESERVED", "Homepage", {}});
