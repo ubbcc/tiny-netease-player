@@ -16,8 +16,11 @@
 #include "api/User.h"
 #include "api/Playlist.h"
 #include "api/Lyric.h"
+#include "LoginWidget.h"
 
 #include <QtNetwork/QNetworkRequest>
+#include <QtNetwork/QNetworkCookie>
+#include <QtNetwork/QNetworkCookieJar>
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
@@ -44,7 +47,6 @@
 #include <QEventLoop>
 #include <QMouseEvent>
 #include <QHash>
-#include <QString>
 
 #include <QImageReader>
 #include <QFileInfo>
@@ -154,7 +156,7 @@ class UndoStack : public QObject {
     MainWindow *parent;
 
 public:
-    UndoStack(MainWindow *parent, int limit = 25);
+    UndoStack(MainWindow *parent, int limit = 30);
     void setLimit(int limit);
     void push(Command command);
     void pop();
@@ -200,6 +202,110 @@ signals:
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
+};
+
+
+class PersistentCookieJar : public QNetworkCookieJar {
+    Q_OBJECT
+    QString MUSIC_U_value, nmtid_value;
+
+public:
+    explicit PersistentCookieJar(QObject *parent = nullptr) : QNetworkCookieJar(parent) {
+    }
+
+    ~PersistentCookieJar() {
+    }
+
+    // 创建一个公开的函数来设置所有 Cookies
+    void setAllCookiesPublic(const QList<QNetworkCookie> &cookies) {
+        setAllCookies(cookies);  // 这里可以访问 setAllCookies
+    }
+
+    // **保存 cookies 到文件**
+    void saveCookiesToFile(const QString &fileName) {
+        QString filePath = cwd.absoluteFilePath(fileName);
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qWarning() << "无法打开文件保存 cookies:" << file.errorString();
+            return;
+        }
+
+        QByteArray plainCookies;
+        QDataStream out(&plainCookies, QIODevice::WriteOnly);
+        QList<QNetworkCookie> cookies = allCookies();
+        out << cookies.size();
+        for (const QNetworkCookie &cookie : cookies) {
+            out << cookie.toRawForm();
+        }
+        plainCookies = MyEnc(plainCookies, cookiesKey);
+        file.write(plainCookies);
+        file.close();
+
+        // qDebug() << cookies.size() << "Cookies 已保存到" << filePath;
+    }
+
+    QString GetTime10Digits() { // 获取当前时间的 Unix 时间戳（秒级）
+        qint64 unixTimestamp = QDateTime::currentSecsSinceEpoch();
+
+        // 将时间戳转换为字符串（十进制表示）
+        QString timestampStr = QString::number(unixTimestamp);
+
+        // 截取前 10 位字符
+        QString truncatedTimestamp = timestampStr.left(10);
+
+        return truncatedTimestamp;
+    }
+
+    // **从文件加载 cookies**
+    void loadCookiesFromFile(const QString &fileName) {
+        QString filePath = cwd.absoluteFilePath(fileName);
+        QFile file(filePath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qWarning() << "无法打开文件加载 cookies:" << file.errorString();
+            return;
+        }
+        QByteArray encryptedCookies;
+        encryptedCookies = file.readAll();
+        encryptedCookies = MyDec(encryptedCookies, cookiesKey);
+        QDataStream in(&encryptedCookies, QIODevice::ReadOnly);
+        qsizetype count;
+        in >> count;
+
+        QList<QNetworkCookie> cookies;
+        for (qsizetype i = 0; i < count; ++i) {
+            QByteArray raw;
+            in >> raw;
+
+            QList<QNetworkCookie> parsed = QNetworkCookie::parseCookies(raw);
+            for (const QNetworkCookie &cookie : parsed) {
+                cookies.append(cookie);
+            }
+        }
+
+        // qDebug() << "cookies loaded:" << cookies;
+
+        QNetworkCookie cookie;
+        cookie = QNetworkCookie("appver", "3.0.18.203152"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("resulution", "1920x1080"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("os", "pc"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("osver", "Microsoft-Windows-10-Professional-build-22631-64bit"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("channel", "netease"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("packageType", "release"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        // cookie = QNetworkCookie("versionCode", "release"); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("mode", ""); /*cookie.setDomain(".music.163.com");*/ cookies.append(cookie);
+        cookie = QNetworkCookie("buildver", GetTime10Digits().toUtf8()); /*cookie.setDomain(".music.163.com");*/  cookies.append(cookie);
+        // 确保所有 Cookie 适用于整个 music.163.com 域名
+        // for (QNetworkCookie &cookie : cookies) {
+        //     /*cookie.setDomain(".music.163.com");*/  // 注意前面的 "."
+        // }
+
+        setAllCookies(cookies);
+        file.close();
+    }
+
+signals:
+    void didntLogin();
+
 };
 
 
@@ -332,27 +438,6 @@ public:
 };
 
 
-class CookieInputDialog : public QDialog
-{
-    Q_OBJECT
-
-public:
-    explicit CookieInputDialog(QWidget *parent = nullptr);
-    ~CookieInputDialog();
-
-protected:
-    // 重写 closeEvent 事件处理函数
-    void closeEvent(QCloseEvent *event) override;
-
-signals:
-    void checkCookie(QString cookieStr);
-
-private:
-    QTextEdit *m_cookieEdit;
-    QPushButton *m_cookieBtn;
-    QVBoxLayout *m_layout;
-};
-
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -394,7 +479,7 @@ private:
     SongItemDelegate *delegate;
 
     User user;
-    bool isGuest;
+    bool isGuest, is_login;
     qint64 user_id;
     QString user_nick_name;
     qint64 favourite_id;
@@ -452,6 +537,7 @@ signals:
     void FavouritePlaylistGot(QJsonDocument json);
     void SelectArtistActionTriggered(qint64 selected_artists_id);
 
+
 private:
     Ui::MainWindow *ui;
     QMetaObject::Connection prevSubBtnConn, prevRcmdBtnConn, prevCrBtnConn, playlistPageDownConn;
@@ -460,6 +546,7 @@ private:
     QScrollArea *global_scroll_area;
     QWidget *global_scroll_area_content;
     QVBoxLayout *global_layout;
+    LoginWidget *loginWidget;
     QPixmap cover_pixmap;
     QString cover_title;
 
@@ -469,8 +556,6 @@ private:
     CommentsDialog *commentsDialog;
 
 private:
-    // QList<QNetworkCookie> myParseCookies(const QString &cookieStr);
-    void SaveMusicAtoFile(QString fileName = "music_a.txt");
     void LoadSettings();
     void SaveSettings();
     void SetupDetailWidget();
@@ -514,7 +599,6 @@ private:
     void RefreshMyFollowedUser();
     void RefreshRcmdPlaylist(qint64 playlist_id);
     void RefreshRcmdArtist(qint64 artist_id);
-    void extracted(QJsonArray &users);
     void RefreshMyRcmdUser();
     void RefreshMyPlaylist();
     void RefreshMydefPlaylist(QList<QVariant> song_ids);
@@ -536,6 +620,7 @@ public:
     friend class UndoStack;
 
     UndoStack undoStack;
+    PersistentCookieJar *cookieJar;
 };
 
 
